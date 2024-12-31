@@ -198,7 +198,7 @@ class Miner(BaseNeuron):
         external_ip = self.config.axon.external_ip or self.config.axon.ip
         if not external_ip or external_ip == "[::]":
             try:
-                external_ip = "23.137.105.76"
+                external_ip = requests.get("https://checkip.amazonaws.com").text.strip()
                 netaddr.IPAddress(external_ip)
             except Exception:
                 bt.logging.error("Failed to get external IP")
