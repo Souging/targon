@@ -63,7 +63,7 @@ class Miner(BaseNeuron):
         assert self.config.netuid
         assert self.config.logging
         assert self.config.model_endpoint
-        self.config.model_endpoint = "https://ymb81ikpjhtscb9esnow.deepln.com"
+        self.config.model_endpoint = "your_endpoint_url"
         # Register log callback
         self.block_callbacks.append(self.log_on_block)
 
