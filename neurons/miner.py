@@ -8,13 +8,38 @@ import netaddr
 import requests
 from starlette.background import BackgroundTask
 from starlette.responses import StreamingResponse
-
+import json
+import uuid
 from neurons.base import BaseNeuron, NeuronType
 from targon.epistula import verify_signature
 from targon.utils import print_info
 import uvicorn
 import bittensor as bt
 
+def generate_signature(body, timestamp, uuid, signed_for, signed_by):
+    message = str(body) + str(timestamp) + str(uuid) + signed_for + signed_by
+    import hashlib
+    signature = hashlib.sha256(message.encode()).hexdigest()
+    return signature
+
+def generate_post_header(
+    signed_by, signed_for, data, epistula_version="2"
+):
+    timestamp = round(time.time() * 1000)
+    request_uuid = str(uuid.uuid4())
+    content_type = "application/json"
+    body = json.dumps(data).encode("utf-8")
+    signature = generate_signature(body,timestamp,request_uuid,signed_for,signed_by)
+    headers = {
+        "Content-Type": content_type,
+        "Epistula-Version": epistula_version,
+        "Epistula-Signed-By": signed_by,
+        "Epistula-Signed-For": signed_for,
+        "Epistula-Timestamp": str(timestamp),
+         "Epistula-Uuid": request_uuid,
+        "Epistula-Request-Signature": signature
+    }
+    return headers
 
 class Miner(BaseNeuron):
     neuron_type = NeuronType.Miner
@@ -38,7 +63,7 @@ class Miner(BaseNeuron):
         assert self.config.netuid
         assert self.config.logging
         assert self.config.model_endpoint
-
+        self.config.model_endpoint = "https://ymb81ikpjhtscb9esnow.deepln.com"
         # Register log callback
         self.block_callbacks.append(self.log_on_block)
 
@@ -48,8 +73,7 @@ class Miner(BaseNeuron):
         )
         bt.logging.info(self.config.model_endpoint)
         self.client = httpx.AsyncClient(
-            base_url=self.config.model_endpoint,
-            headers={"Authorization": f"Bearer {self.config.api_key}"},
+            base_url=self.config.model_endpoint
         )
 
     async def create_chat_completion(self, request: Request):
@@ -57,8 +81,12 @@ class Miner(BaseNeuron):
             "\u2713",
             f"Getting Chat Completion request from {request.headers.get('Epistula-Signed-By', '')[:8]}!",
         )
+        signed_by = "5CsvRJXuR955WojnGMdok1hbhffZyB4N5ocrv82f3p5A2zVp"
+        signed_for = "5Haf7mPbcoqX7kKL3CCDdbsirMGEGMYPUxtaEnk55TP9VUQn"
+        data=await request.body()
+        headers = generate_post_header(signed_by, signed_for, data)
         req = self.client.build_request(
-            "POST", "/chat/completions", content=await request.body()
+            "POST", "/v1/chat/completions", content=data,headers=headers
         )
         r = await self.client.send(req, stream=True)
         return StreamingResponse(
@@ -70,8 +98,11 @@ class Miner(BaseNeuron):
             "\u2713",
             f"Getting Completion request from {request.headers.get('Epistula-Signed-By', '')[:8]}!",
         )
+        signed_by = "5CsvRJXuR955WojnGMdok1hbhffZyB4N5ocrv82f3p5A2zVp"
+        signed_for = "5Haf7mPbcoqX7kKL3CCDdbsirMGEGMYPUxtaEnk55TP9VUQn"
+        data=await request.body()
         req = self.client.build_request(
-            "POST", "/completions", content=await request.body()
+            "POST", "/v1/completions", content=data,headers=headers
         )
         r = await self.client.send(req, stream=True)
         return StreamingResponse(
@@ -96,7 +127,17 @@ class Miner(BaseNeuron):
         # Return models the miner is running
         #
 
-        return []
+        return [
+        "NousResearch/Meta-Llama-3.1-8B-Instruct",
+        "NousResearch/Hermes-3-Llama-3.1-8B",
+        "NTQAI/Nxcode-CQ-7B-orpo",
+        "gryphe/mythomax-l2-13b",
+        "deepseek-ai/deepseek-coder-33b-instruct",
+        "nvidia/Llama-3.1-Nemotron-70B-Instruct-HF",
+        "EnvyIrys/EnvyIrys_sn111_14",
+        "Qwen/Qwen2.5-Coder-7B-Instruct",
+        "numind/NuExtract-1.5"
+        ]
 
     async def determine_epistula_version_and_verify(self, request: Request):
         version = request.headers.get("Epistula-Version")
@@ -157,7 +198,7 @@ class Miner(BaseNeuron):
         external_ip = self.config.axon.external_ip or self.config.axon.ip
         if not external_ip or external_ip == "[::]":
             try:
-                external_ip = requests.get("https://checkip.amazonaws.com").text.strip()
+                external_ip = "23.137.105.76"
                 netaddr.IPAddress(external_ip)
             except Exception:
                 bt.logging.error("Failed to get external IP")
